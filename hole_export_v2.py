@@ -18,6 +18,7 @@ n = len(attentions_data)
 print("exporting " + str(n) + " holes...")
 export = []
 ready_to_try = []
+pid2ind = {}
 def get_hole_content(i, pid, depth):
     try:
         if depth >= 7: # 增加重试七次，每次休眠
@@ -32,7 +33,7 @@ def get_hole_content(i, pid, depth):
         if comments["code"] != 0:
             ready_to_try.append(pid)
             raise Exception("get comments (pid=" + pid + ") request failed")
-        export.append({"post": attentions_data[i], "comments": comments["data"]})
+        export.append({"post": attentions_data[pid2ind[pid]], "comments": comments["data"]})
         print(f"{i+1}/{n} finished export pid={pid}")
         return True
     except Exception as e:
@@ -41,9 +42,13 @@ def get_hole_content(i, pid, depth):
 for elem in attentions_data:
     ready_to_try.append(elem["pid"])
 
+
+for i, pid in enumerate(ready_to_try):
+    pid2ind[pid] = i
+
 continuously_failure = 0 # 连着失败的次数。如果连着失败2次，休眠30秒
 if ready_to_try:
-    for i,pid in enumerate(ready_to_try):
+    for i, pid in enumerate(ready_to_try):
         if get_hole_content(i, pid, 0): 
         # 如果获取失败,会在函数中被再次添加到list末尾留待重新获取，直到所有的树洞都获取完成
             continuously_failure = 0
