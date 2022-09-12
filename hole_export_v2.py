@@ -3,6 +3,7 @@ import time
 import random
 import requests
 from datetime import datetime
+from json_util import obj_stringfy
 
 # Input your pkuhelper user token here
 USER_TOKEN = "your user token here"
@@ -31,10 +32,10 @@ def get_hole_content(i, pid, depth):
                         pid+"&PKUHelperAPI=3.0&jsapiver=null-111111&user_token="+USER_TOKEN)
         comments = r2.json()
         if comments["code"] != 0:
+            # 如果获取失败,会在函数中被再次添加到list末尾留待重新获取，直到所有的树洞都获取完成
             ready_to_try.append(pid)
             raise Exception("get comments (pid=" + pid + ") request failed")
         export.append({"post": attentions_data[pid2ind[pid]], "comments": comments["data"]})
-        print(f"{i+1}/{n} finished export pid={pid}")
         return True
     except Exception as e:
         return get_hole_content(i, pid, depth+1)
@@ -47,37 +48,21 @@ for i, pid in enumerate(ready_to_try):
     pid2ind[pid] = i
 
 continuously_failure = 0 # 连着失败的次数。如果连着失败2次，休眠30秒
-if ready_to_try:
-    for i, pid in enumerate(ready_to_try):
-        if get_hole_content(i, pid, 0): 
-        # 如果获取失败,会在函数中被再次添加到list末尾留待重新获取，直到所有的树洞都获取完成
-            continuously_failure = 0
-        else:
-            continuously_failure += 1
-            if continuously_failure >= 2:
-                time.sleep(30)
+
+with open("export.txt", "w", encoding="utf8") as holes:
+    if ready_to_try:
+        for i, pid in enumerate(ready_to_try):
+            if get_hole_content(i, pid, 0): 
                 continuously_failure = 0
-
-# 将所有的树洞都装进list后再写入文件，如果树洞不是dramatically多，应该是不会爆内存的。因此不另写数据分片逻辑
-export_txt = ""
-for item in export:
-    post = item["post"]
-    image_url = "[图片] https://pkuhelper.pku.edu.cn/services/pkuhole/images/" + \
-        post["url"] + "\n" if len(post["url"]) > 0 else ""
-    time_str = datetime.fromtimestamp(
-        int(post["timestamp"])).strftime('%Y-%m-%d %H:%M:%S')
-    export_txt += "#{}\n{}\n{}（{} {}关注 {}回复）\n".format(
-        post["pid"], post["text"], image_url, time_str, post["likenum"], post["reply"])
-    for comment in item["comments"]:
-        time_str = datetime.fromtimestamp(
-            int(comment["timestamp"])).strftime('%Y-%m-%d %H:%M:%S')
-        export_txt += "{}\n{}\n".format(time_str, comment["text"])
-    export_txt += "\n========================================================\n\n"
-
-
-with open("export.txt", "w") as f:
-    f.write(export_txt.encode('GBK','ignore').decode('GBK'))
-
-
-with open("export.json", "w") as f:
-    f.write(json.dumps(export))
+                # 获取成功，将新添加的json对象写入文件
+                obj = export[-1]
+                holes.write(obj_stringfy(obj))
+                holes.write("\n========================================\n\n")
+                holes.flush()
+                print(f"{i+1}/{n} finished export pid={pid}")
+            else:
+                # 获取失败，连续失败次数加1，如果连续失败两次，休眠30秒躲过网络拦截
+                continuously_failure += 1
+                if continuously_failure >= 2:
+                    time.sleep(30)
+                    continuously_failure = 0
